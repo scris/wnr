@@ -66,7 +66,7 @@ app.on('ready', () => {
     })
 
     if (process.platform == "win32") tray = new Tray(path.join(__dirname, '\\res\\icons\\iconWin.ico'));
-    else if(process.platform != "darwin") tray = new Tray(path.join(__dirname, '\\res\\icons\\wnrIcon.png'));
+    else tray = new Tray(path.join(__dirname, '\\res\\icons\\wnrIcon.png'));
     const contextMenu = Menu.buildFromTemplate([
         {
             label: 'Show/Hide', click: () => {
@@ -77,15 +77,13 @@ app.on('ready', () => {
         },
         { label: 'Exit', click: () => { app.quit() } }
     ]);
-    if(tray != null) {
-        tray.setToolTip('wnr');
-        tray.setContextMenu(contextMenu);
-        tray.on('click', () => {
-            win.isVisible() ? win.hide() : win.show();
-            if (settingsWin != null) settingsWin.isVisible() ? settingsWin.hide() : settingsWin.show();
-            if (aboutWin != null) aboutWin.isVisible() ? aboutWin.hide() : aboutWin.show()
-        });//托盘菜单
-    }
+    tray.setToolTip('wnr');
+    tray.setContextMenu(contextMenu);
+    tray.on('click', () => {
+        win.isVisible() ? win.hide() : win.show();
+        if (settingsWin != null) settingsWin.isVisible() ? settingsWin.hide() : settingsWin.show();
+        if (aboutWin != null) aboutWin.isVisible() ? aboutWin.hide() : aboutWin.show()
+    });//托盘菜单
 
     if (process.platform === 'darwin') {
         var template = [{
@@ -98,26 +96,37 @@ app.on('ready', () => {
                 }
             }]
         }, {
-            label: 'Help',
+            label: 'Edit',
             submenu: [{
-                label: 'Website',
-                click: function () {
-                    shell.openExternal('https://wnr.scris.top/');
-                }
+                label: 'Undo',
+                accelerator: 'CmdOrCtrl+Z',
+                selector: 'undo:'
             }, {
-                label: 'Help Page',
-                click: function () {
-                    shell.openExternal('https://wnr.scris.top/help.html');
-                }
+                label: 'Redo',
+                accelerator: 'Shift+CmdOrCtrl+Z',
+                selector: 'redo:'
             }, {
-                label: 'View it on Github',
-                click: function () {
-                    shell.openExternal('https://github.com/RoderickQiu/wnr/');
-                }
+                type: 'separator'
+            }, {
+                label: 'Cut',
+                accelerator: 'CmdOrCtrl+X',
+                selector: 'cut:'
+            }, {
+                label: 'Copy',
+                accelerator: 'CmdOrCtrl+C',
+                selector: 'copy:'
+            }, {
+                label: 'Paste',
+                accelerator: 'CmdOrCtrl+V',
+                selector: 'paste:'
+            }, {
+                label: 'Select All',
+                accelerator: 'CmdOrCtrl+A',
+                selector: 'selectAll:'
             }]
         }];
-        var osxMenu = Menu.buildFromTemplate(template);
-        Menu.setApplicationMenu(osxMenu)
+        var osxMenu = menu.buildFromTemplate(template);
+        menu.setApplicationMenu(osxMenu)
     }// 应付macOS的顶栏空缺
 })
 
@@ -230,7 +239,7 @@ ipcMain.on('about', function () {
 })
 
 ipcMain.on('settings', function () {
-    settingsWin = new BrowserWindow({ parent: win, modal: true, width: 720, height: 540, resizable: false, frame: false, show: false, center: true, webPreferences: { nodeIntegration: true } });
+    settingsWin = new BrowserWindow({ parent: win, modal: true, width: 720, height: 500, resizable: false, frame: false, show: false, center: true, webPreferences: { nodeIntegration: true } });
     settingsWin.loadFile("settings.html");
     if (store.get("top") == true || store.get("top") == undefined) settingsWin.setAlwaysOnTop(true);
     settingsWin.once('ready-to-show', () => {
