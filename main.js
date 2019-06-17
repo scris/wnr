@@ -1,27 +1,36 @@
-const { app, BrowserWindow, ipcMain, Tray, Menu, globalShortcut, dialog, shell } = require('electron')
+const { app, BrowserWindow, ipcMain, Tray, Menu, globalShortcut, dialog, shell, powerSaveBlocker, systemPreferences } = require('electron')
 const Store = require('electron-store');
 const store = new Store();
 const path = require("path");
+const notifier = require('node-notifier');
+var i18n = require("i18n");
+var Registry = require('winreg')
 
 // Keep a global reference of the window object, if you don't, the window will
 // be closed automatically when the JavaScript object is garbage collected.
-let win, settingsWin = null, aboutWin = null
-let tray = null
-app.commandLine.appendSwitch('autoplay-policy', 'no-user-gesture-required');// 允许自动播放音频
+let win, settingsWin = null, aboutWin = null, tourWin = null;
+let tray = null, contextMenu = null
+let resetAlarm = null
+let isTimerWin = null, isWorkMode = null
+
+app.commandLine.appendSwitch('autoplay-policy', 'no-user-gesture-required')// 允许自动播放音频
+
+powerSaveBlocker.start('prevent-app-suspension')//防止app被挂起，停止计时
 
 function createWindow() {
     // 创建浏览器窗口。
     win = new BrowserWindow({
-        width: 324,
-        height: 256,
+        width: 364,
+        height: 360,
         frame: false,
-        resizable: true,
+        resizable: false,
+        maximizable: false,
         show: false,
         hasShadow: true,
         webPreferences: { nodeIntegration: true },
+        titleBarStyle: "hiddenInset",
         title: "wnr",
-        icon: "./res/icons/wnrIcon.png",
-        backgroundColor: "#fefefe"
+        icon: "./res/icons/wnrIcon.png"
     });// 为跨平台优化
 
     // 然后加载应用的 index.html。
@@ -45,6 +54,23 @@ function createWindow() {
     })
 }
 
+function alarmSet() {
+    if (!resetAlarm) {
+        resetAlarm = setInterval(function () {
+            if (win != null) win.flashFrame(true);
+            notifier.notify(
+                {
+                    title: i18n.__('alarmtip'),
+                    message: i18n.__('alarmtipmsg'),
+                    sound: true, // Only Notification Center or Windows Toasters
+                    wait: true // Wait with callback, until user action is taken against notification
+                }
+            );
+            if (!win.isVisible()) win.show();
+        }, 1200000)//不断提示使用wnr
+    }
+}
+
 // 当程序就要结束
 app.on('will-quit', () => {
     // 清空所有快捷键
@@ -57,46 +83,106 @@ app.on('will-quit', () => {
 app.on('ready', () => {
     createWindow();
 
-    if (store.get("top") == true || store.get("top") == undefined) win.setAlwaysOnTop(true);
+    i18n.configure({
+        locales: ['en', 'zh'],
+        directory: __dirname + '/locales',
+        register: global
+    });
+    if (store.get("i18n") == undefined) {
+        var lang = app.getLocale();
+        if (lang[0] == 'e' && lang[1] == 'n') {
+            lang = 'en';
+        }
+        if (lang[0] == 'z' && lang[1] == 'h') {
+            lang = 'zh';
+        }//自动去掉不必要的语言尾巴
+        store.set('i18n', lang);
+    }
+    i18n.setLocale(store.get("i18n"));//国际化组件默认设置
 
-    globalShortcut.register('CommandOrControl+Shift+Alt+W', () => {
-        win.isVisible() ? win.hide() : win.show();
-        if (settingsWin != null) settingsWin.isVisible() ? settingsWin.hide() : settingsWin.show();
-        if (aboutWin != null) aboutWin.isVisible() ? aboutWin.hide() : aboutWin.show();
+    const gotTheLock = app.requestSingleInstanceLock();
+    if (!gotTheLock) {
+        dialog.showMessageBox(win, {
+            title: i18n.__('multiwnr'),
+            type: "warning",
+            message: i18n.__('multiwnrmsg'),
+            checkboxLabel: i18n.__('multiwnrchk'),
+            checkboxChecked: true
+        }, function (response, checkboxChecked) {
+            if (checkboxChecked) {
+                app.quit();
+            }
+        })
+    }//不希望有多个wnr同时运行
+
+    if (store.get("top") == true) win.setAlwaysOnTop(true);
+
+    if (!store.get('hotkey1')) store.set('hotkey1', 'W');
+    if (!store.get('hotkey2')) store.set('hotkey2', 'S');
+
+    globalShortcut.register('CommandOrControl+Shift+Alt+' + store.get('hotkey1'), () => {
+        if (!isTimerWin || (isWorkMode && (!store.get('fullscreen-work')) || (!isWorkMode && (!store.get('fullscreen'))))) {
+            win.isVisible() ? win.hide() : win.show();
+            if (settingsWin != null) settingsWin.isVisible() ? settingsWin.hide() : settingsWin.show();
+            if (aboutWin != null) aboutWin.isVisible() ? aboutWin.hide() : aboutWin.show();
+            if (tourWin != null) tourWin.isVisible() ? tourWin.hide() : tourWin.show();
+        }//防止这样用快捷键退出专心模式
     })
+
+    if (process.platform == "darwin") {
+        if (!app.isInApplicationsFolder()) {
+            notifier.notify(
+                {
+                    title: i18n.__('wrongfolder'),
+                    message: i18n.__('wrongfoldertip'),
+                    sound: true, // Only Notification Center or Windows Toasters
+                    wait: true // Wait with callback, until user action is taken against notification
+                }
+            );
+        }
+    }
 
     if (process.platform == "win32") tray = new Tray(path.join(__dirname, '\\res\\icons\\iconWin.ico'));
     else if (process.platform != "darwin") tray = new Tray(path.join(__dirname, '\\res\\icons\\wnrIcon.png'));
-    const contextMenu = Menu.buildFromTemplate([
+    contextMenu = Menu.buildFromTemplate([
         {
-            label: 'wnr v' + require("./package.json").version
+            label: 'wnr' + i18n.__('v') + require("./package.json").version
         }, {
             type: 'separator'
         }, {
-            label: 'Website',
+            label: i18n.__('startorstop'),
+            enabled: false,
+            click: function () {
+                win.webContents.send('startorstop')
+            }
+        }, {
+            type: 'separator'
+        }, {
+            label: i18n.__('website'),
             click: function () {
                 shell.openExternal('https://wnr.scris.top/');
             }
         }, {
-            label: 'Help Page',
+            label: i18n.__('helppage'),
             click: function () {
                 shell.openExternal('https://wnr.scris.top/help.html');
             }
         }, {
-            label: 'Github',
+            label: i18n.__('github'),
             click: function () {
                 shell.openExternal('https://github.com/RoderickQiu/wnr/');
             }
         }, {
             type: 'separator'
         }, {
-            label: 'Show / Hide', click: () => {
+            label: i18n.__('showorhide'), click: () => {
                 win.isVisible() ? win.hide() : win.show();
                 if (settingsWin != null) settingsWin.isVisible() ? settingsWin.hide() : settingsWin.show();
                 if (aboutWin != null) aboutWin.isVisible() ? aboutWin.hide() : aboutWin.show();
+                if (tourWin != null) tourWin.isVisible() ? tourWin.hide() : tourWin.show();
             }
         }, {
-            label: 'Exit', click: () => { app.quit() }
+            label: i18n.__('exit'), click: () => { app.quit() }
         }
     ]);
     if (tray != null) {
@@ -105,43 +191,138 @@ app.on('ready', () => {
         tray.on('click', () => {
             win.isVisible() ? win.hide() : win.show();
             if (settingsWin != null) settingsWin.isVisible() ? settingsWin.hide() : settingsWin.show();
-            if (aboutWin != null) aboutWin.isVisible() ? aboutWin.hide() : aboutWin.show()
+            if (aboutWin != null) aboutWin.isVisible() ? aboutWin.hide() : aboutWin.show();
+            if (tourWin != null) tourWin.isVisible() ? tourWin.hide() : tourWin.show();
         });//托盘菜单
     }
 
-    if (process.platform === 'darwin') {
-        var template = [{
-            label: 'wnr',
-            submenu: [{
-                label: 'Quit',
-                accelerator: 'CmdOrCtrl+Q',
-                click: function () {
-                    app.quit();
-                }
-            }]
-        }, {
-            label: 'Help',
-            submenu: [{
-                label: 'Website',
-                click: function () {
-                    shell.openExternal('https://wnr.scris.top/');
-                }
-            }, {
-                label: 'Help Page',
-                click: function () {
-                    shell.openExternal('https://wnr.scris.top/help.html');
-                }
-            }, {
-                label: 'View it on Github',
-                click: function () {
-                    shell.openExternal('https://github.com/RoderickQiu/wnr/');
-                }
-            }]
-        }];
-        var osxMenu = Menu.buildFromTemplate(template);
-        Menu.setApplicationMenu(osxMenu)
-    }// 应付macOS的顶栏空缺
+    macOSFullscreenSolution(false);
+    isDarkMode()
 })
+
+function macOSFullscreenSolution(isFullScreen) {
+    if (app.isReady()) {
+        if (process.platform === 'darwin') {
+            if (!isFullScreen)
+                var template = [{
+                    label: 'wnr',
+                    submenu: [{
+                        label: i18n.__('quit'),
+                        accelerator: 'CmdOrCtrl+Q',
+                        click: function () {
+                            app.quit();
+                        }
+                    }]
+                }, {
+                    label: i18n.__('dothings'),
+                    submenu: [{
+                        label: i18n.__('settings'),
+                        click: function () {
+                            settings();
+                        }
+                    }, {
+                        label: i18n.__('tourguide'),
+                        click: function () {
+                            tourguide();
+                        }
+                    }, {
+                        label: i18n.__('about'),
+                        click: function () {
+                            about();
+                        }
+                    }, {
+                        type: 'separator'
+                    }, {
+                        label: i18n.__('website'),
+                        click: function () {
+                            shell.openExternal('https://wnr.scris.top/');
+                        }
+                    }, {
+                        label: i18n.__('helppage'),
+                        click: function () {
+                            shell.openExternal('https://wnr.scris.top/help.html');
+                        }
+                    }, {
+                        label: i18n.__('github'),
+                        click: function () {
+                            shell.openExternal('https://github.com/RoderickQiu/wnr/');
+                        }
+                    }]
+                }];
+            else
+                var template = [{
+                    label: 'wnr',
+                    submenu: [{
+                        label: i18n.__('quit'),
+                        enabled: false
+                    }]
+                }, {
+                    label: i18n.__('dothings'),
+                    submenu: [{
+                        label: i18n.__('settings'),
+                        enabled: false
+                    }, {
+                        label: i18n.__('tourguide'),
+                        enabled: false
+                    }, {
+                        label: i18n.__('about'),
+                        enabled: false
+                    }, {
+                        type: 'separator'
+                    }, {
+                        label: i18n.__('website'),
+                        enabled: false
+                    }, {
+                        label: i18n.__('helppage'),
+                        enabled: false
+                    }, {
+                        label: i18n.__('github'),
+                        enabled: false
+                    }]
+                }];
+            var osxMenu = Menu.buildFromTemplate(template);
+            Menu.setApplicationMenu(osxMenu);
+            app.dock.setMenu(osxMenu)
+        }// 应付macOS的顶栏空缺
+    }
+}
+
+function isDarkMode() {
+    if (app.isReady()) {
+        store.set('isDarkMode', false);
+        if (process.platform == 'darwin') {
+            if (systemPreferences.isDarkMode()) {
+                store.set('isDarkMode', true);
+                win.backgroundColor = '#393939';
+            }
+            systemPreferences.subscribeNotification(
+                'AppleInterfaceThemeChangedNotification',
+                function theThemeHasChanged() {
+                    isDarkMode();
+                }
+            )
+        } else if (process.platform == 'win32') {
+            var regKey = new Registry({                                       // new operator is optional
+                hive: Registry.HKCU,                                        // open registry hive HKEY_CURRENT_USER
+                key: '\\Software\\Microsoft\\Windows\\CurrentVersion\\Themes\\Personalize' // key containing autostart programs
+            })
+            regKey.values(function (err, items) {
+                if (err)
+                    return 'unset';
+                else {
+                    for (var i = 0; i < items.length; i++) {
+                        if (items[i].name == 'AppsUseLightTheme') {
+                            if (items[i].value == "0x0") {
+                                store.set('isDarkMode', true);
+                                win.backgroundColor = '#393939';
+                            }
+                        }
+                    }
+                }
+            });
+        }
+    }
+}
 
 app.on('activate', () => {
     // 在macOS上，当单击dock图标并且没有其他窗口打开时，
@@ -151,65 +332,96 @@ app.on('activate', () => {
     }
 })
 
+ipcMain.on('focus-first', function () {
+    if (store.get("top") != true) win.setAlwaysOnTop(true);//全屏时恒定最上层
+    win.setFullScreen(true);
+    macOSFullscreenSolution(true);
+    isWorkMode = true;
+})
+
 ipcMain.on('warninggiver-workend', function () {
     if (win != null) {
+        isWorkMode = false;
         win.show();
         win.focus();
         win.center();
-        win.once('focus', () => win.flashFrame(false));
         win.flashFrame(true);
-        if (store.get("fullscreen") == true) win.setFullScreen(true);
+        if (store.get("fullscreen") == true) {
+            if (store.get("top") != true) win.setAlwaysOnTop(true);//全屏时恒定最上层
+            win.setFullScreen(true);
+            macOSFullscreenSolution(true);
+        } else {
+            if (store.get("top") != true) win.setAlwaysOnTop(false);//取消不需要的恒定最上层
+            win.setFullScreen(false);
+            macOSFullscreenSolution(false);
+        }
         setTimeout(function () {
             dialog.showMessageBox(win, {
-                title: "Your work time is now ended!",
-                type: "info",
-                message: "Your work time is now ended. Enjoy your rest time!",
-                silent: true
-            });
+                title: i18n.__('worktimeend'),
+                type: "warning",
+                message: i18n.__('worktimeend'),
+            }, function (response) {
+                win.webContents.send('warning-closed');
+            })
         }, 100)
     }
 })
 
 ipcMain.on('warninggiver-restend', function () {
     if (win != null) {
-        win.once('focus', () => win.flashFrame(false));
+        isWorkMode = true;
+        if (!win.isVisible()) win.show();
         win.flashFrame(true);
-        if (win.isFullScreen()) win.setFullScreen(false);
+        if (store.get("fullscreen-work") == true) {
+            if (store.get("top") != true) win.setAlwaysOnTop(true);//全屏时恒定最上层
+            win.setFullScreen(true);
+            macOSFullscreenSolution(true);
+        } else {
+            if (store.get("top") != true) win.setAlwaysOnTop(false);//取消不需要的恒定最上层
+            win.setFullScreen(false);
+            macOSFullscreenSolution(false);
+        }
         setTimeout(function () {
             dialog.showMessageBox(win, {
-                title: "Your rest time is now ended!",
-                type: "info",
-                message: "Your rest time is now ended. Start working!"
-            }, function () {
-                if (!win.isVisible()) win.show();
-            });
+                title: i18n.__('resttimeend'),
+                type: "warning",
+                message: i18n.__('resttimemsg'),
+            }, function (response) {
+                win.webContents.send('warning-closed');
+            })
         }, 180)
     }
 })
 
 ipcMain.on('warninggiver-allend', function () {
     if (win != null) {
-        win.once('focus', () => win.flashFrame(false));
+        isTimerWin = false;
+        if (!win.isVisible()) win.show();
         win.flashFrame(true);
-        if (win.isFullScreen()) win.setFullScreen(false);
+        if (store.get("fullscreen") == true) {
+            if (store.get("top") != true) win.setAlwaysOnTop(false);//取消不需要的恒定最上层
+            win.setFullScreen(false);
+            macOSFullscreenSolution(false);
+        }
         setTimeout(function () {
             dialog.showMessageBox(win, {
-                title: "Your schedule is now finished!",
-                type: "info",
-                message: "Your schedule is now finished. You can now set another one."
-            }, function () {
-                if (!win.isVisible()) win.show()
-            });
+                title: i18n.__('allend'),
+                type: "warning",
+                message: i18n.__('allmsg'),
+            }, function (response) {
+                win.loadFile('index.html');//回到首页，方便开始新计划
+            })
         }, 100)
+        alarmSet();
     }
 })
 
 ipcMain.on('updateavailable', function () {
-    dialog.showMessageBox(win, {
-        title: "New version available!",
+    dialog.showMessageBox(settingsWin, {
+        title: i18n.__('update'),
         type: "warning",
-        message: "A new version of wnr is now available. To enjoy wnr better, you should download and install the update.",
-        checkboxLabel: "Go to GitHub and download the new release",
+        message: i18n.__('updatemsg'),
+        checkboxLabel: i18n.__('updatechk'),
         checkboxChecked: true
     }, function (response, checkboxChecked) {
         if (checkboxChecked) {
@@ -219,10 +431,34 @@ ipcMain.on('updateavailable', function () {
 })
 
 ipcMain.on('noupdateavailable', function () {
-    dialog.showMessageBox(win, {
-        title: "No update available.",
+    dialog.showMessageBox(settingsWin, {
+        title: i18n.__('noupdate'),
         type: "info",
-        message: "No update available. Thanks for using wnr!"
+        message: i18n.__('noupdatemsg')
+    })
+})
+
+ipcMain.on('webproblem', function () {
+    dialog.showMessageBox(settingsWin, {
+        title: i18n.__('webproblem'),
+        type: "info",
+        message: i18n.__('webproblemmsg')
+    })
+})
+
+ipcMain.on('deleteall', function () {
+    dialog.showMessageBox(settingsWin, {
+        title: i18n.__('deletealltitle'),
+        type: "warning",
+        message: i18n.__('deleteallcontent'),
+        checkboxLabel: i18n.__('deleteallchk'),
+        checkboxChecked: false
+    }, function (response, checkboxChecked) {
+        if (checkboxChecked) {
+            store.clear();
+            app.relaunch();
+            app.exit(0)
+        }
     })
 })
 
@@ -239,42 +475,113 @@ ipcMain.on('minimizer', function () {
     win.minimize()
 })
 
-ipcMain.on('about', function () {
-    aboutWin = new BrowserWindow({ parent: win, modal: true, width: 256, height: 233, resizable: false, frame: false, show: false, center: true, webPreferences: { nodeIntegration: true } });
-    aboutWin.loadFile("about.html");
-    if (store.get("top") == true || store.get("top") == undefined) aboutWin.setAlwaysOnTop(true);
-    aboutWin.once('ready-to-show', () => {
-        aboutWin.show();
-    })
-    aboutWin.on('closed', () => {
-        aboutWin = null
-    })
-})
+function about() {
+    if (app.isReady()) {
+        aboutWin = new BrowserWindow({ parent: win, width: 256, height: 233, resizable: false, frame: false, show: false, center: true, titleBarStyle: "hidden", webPreferences: { nodeIntegration: true } });
+        aboutWin.loadFile("about.html");
+        if (store.get("top") == true) aboutWin.setAlwaysOnTop(true);
+        aboutWin.once('ready-to-show', () => {
+            aboutWin.show();
+        })
+        aboutWin.on('closed', () => {
+            aboutWin = null
+        })
+    }
+}
+ipcMain.on('about', about);
 
-ipcMain.on('settings', function () {
-    settingsWin = new BrowserWindow({ parent: win, modal: true, width: 720, height: 540, resizable: false, frame: false, show: false, center: true, webPreferences: { nodeIntegration: true } });
-    settingsWin.loadFile("settings.html");
-    if (store.get("top") == true || store.get("top") == undefined) settingsWin.setAlwaysOnTop(true);
-    settingsWin.once('ready-to-show', () => {
-        settingsWin.show();
-    })
-    settingsWin.on('closed', () => {
-        if (win != null) {
-            win.reload();
+function settings() {
+    if (app.isReady()) {
+        settingsWin = new BrowserWindow({ parent: win, width: 729, height: 486, resizable: false, frame: false, show: false, center: true, webPreferences: { nodeIntegration: true }, titleBarStyle: "hidden" });
+        settingsWin.loadFile("settings.html");
+        if (store.get("top") == true) settingsWin.setAlwaysOnTop(true);
+        settingsWin.once('ready-to-show', () => {
+            settingsWin.show();
+        })
+        settingsWin.on('closed', () => {
+            if (win != null) {
+                win.reload();
+            }
+            settingsWin = null
+        })
+        if (!store.get("settings-experience")) {
+            store.set("settings-experience", true);
+            notifier.notify(
+                {
+                    title: i18n.__('settingstip'),
+                    message: i18n.__('settingstipmsg'),
+                    sound: true, // Only Notification Center or Windows Toasters
+                    wait: true // Wait with callback, until user action is taken against notification
+                }
+            );
         }
-        settingsWin = null
-    })
+    }
+}
+ipcMain.on('settings', settings);
+
+function tourguide() {
+    if (app.isReady()) {
+        tourWin = new BrowserWindow({ parent: win, width: 729, height: 600, resizable: false, frame: false, show: false, center: true, titleBarStyle: "hidden", webPreferences: { nodeIntegration: true } });
+        tourWin.loadFile("tourguide.html");
+        if (store.get("top") == true) tourWin.setAlwaysOnTop(true);
+        tourWin.once('ready-to-show', () => {
+            tourWin.show();
+        })
+        tourWin.on('closed', () => {
+            tourWin = null
+        })
+        notifier.notify(
+            {
+                title: i18n.__('welcomer1'),
+                message: i18n.__('alarmtipmsg'),
+                sound: true, // Only Notification Center or Windows Toasters
+                wait: true // Wait with callback, until user action is taken against notification
+            }
+        );
+    }
+}
+ipcMain.on('tourguide', tourguide);
+
+ipcMain.on('1min', function () {
+    notifier.notify(
+        {
+            title: i18n.__('1min'),
+            message: i18n.__('1minmsg'),
+            sound: true, // Only Notification Center or Windows Toasters
+            wait: true // Wait with callback, until user action is taken against notification
+        }
+    );
 })
 
 ipcMain.on("progress-bar-set", function (event, message) {
-    win.setProgressBar(1 - message)
+    if (win != null) win.setProgressBar(1 - message)
 })
 
 ipcMain.on("logger", function (event, message) {
     console.log(message)
 })
 
-/* 参考：
-- https://blog.avocode.com/4-must-know-tips-for-building-cross-platform-electron-apps-f3ae9c2bffff [need proxy]
-- https://electronjs.org/docs
-*/
+ipcMain.on("timer-win", function (event, message) {
+    if (message) {
+        if (aboutWin != null) aboutWin.close();
+        if (tourWin != null) tourWin.close();
+        if (settingsWin != null) settingsWin.close();
+        if (tray != null) {
+            contextMenu.items[2].enabled = true;
+        }
+        globalShortcut.register('CommandOrControl+Shift+Alt+' + store.get('hotkey2'), () => {
+            win.webContents.send('startorstop');
+        })
+        if (resetAlarm) {
+            clearTimeout(resetAlarm);
+        }
+        isTimerWin = true;
+    } else {
+        if (tray != null) {
+            contextMenu.items[2].enabled = false;
+        }
+        globalShortcut.unregister('CommandOrControl+Shift+Alt+' + store.get('hotkey2'));
+        alarmSet();
+        isTimerWin = false;
+    }
+})

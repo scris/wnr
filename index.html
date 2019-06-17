@@ -6,9 +6,14 @@
     <meta charset="UTF-8" />
     <meta http-equiv="Content-Type" content="text/html" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, minimal-ui" />
-    <script>if (typeof module === 'object') { window.module = module; module = undefined; }</script><!-- solve the electron-jquery conflict -->
+    <script>
+        if (typeof module === 'object') {
+            window.module = module; module = undefined;
+        }
+    </script>
+    <!-- solve the electron-jquery conflict, style changed due to a vscode problem -->
     <script src="res/lib/jquery-3.3.1.min.js"></script>
-    <script src="res/lib/bootstrap.min.js"></script>
+    <script src="res/lib/bootstrap.bundle.min.js"></script>
     <link rel="stylesheet" type="text/css" href="res/lib/bootstrap.min.css" />
     <script src="res/lib/all.js"></script>
     <script src="res/lib/v4-shims.js"></script><!-- font-awesome 5 use as 4 -->
@@ -17,58 +22,168 @@
 
 <body onpaste="return false">
     <!-- prevent people from pasting abnormal content -->
+    <script src="supporter.js"></script>
+    <script src="updater.js"></script>
     <script>
-        function about() {
-            ipc.send("about");
+        if (!store.get('tour')) {
+            store.set('tour', 'true');
+            ipc.send("tourguide");
         }
-        function settings() {
-            ipc.send("settings");
-        }
-        function winhider() {
-            ipc.send("winhider");
-        }
-        function minimizer() {
-            ipc.send("minimizer");
-        }
+    </script>
+    <script>
         function keydown(e) {
             var currKey = 0, e = e || event;
             if (e.keyCode == 13) {
-                window.location.href = "timer.html?title=" + $("#title").val() + "&work-time=" + $("#work-time").val() + "&rest-time=" + $("#rest-time").val() + "&loop=" + $("#loop").val();
+                window.location.href = "timer.html?title=" + $("#title").val() + "&work-time=" + $("#work-time").val() + "&rest-time=" + $("#rest-time").val() + "&loop=" + $("#loop").val() + "&note=" + $("#note").val();
+            }
+            if (e.keyCode == 38 || e.keyCode == 40 || e.keyCode == 110 || e.keyCode == 69) {
+                return false;
             }
         }
         document.onkeydown = keydown;
     </script>
     <div class="d-flex mx-auto justify-content-center align-items-center text-dark" id="main">
         <div id="controller">
-            <a href="javascript:settings()" class="small rest"><i class="fa fa-cog fa-fw" title="Settings"></i></a>&nbsp;
-            <a href="javascript:about()" class="small rest"><i class="fa fa-info fa-fw" title="About wnr"></i></a>&nbsp;
-            <a href="javascript:winhider()" class="small rest" id="win-hider"><i class="fa fa-sort-desc fa-fw" title="Hide the window to system tray"></i></a><span
-                id="no-use-space">&nbsp;</span>
-            <a href="javascript:minimizer()" class="small rest"><i class="fa fa-minus fa-fw" title="Minimize to taskbar"></i></a>&nbsp;
-            <a href="javascript:window.close()" class="small rest"><i class="fa fa-times fa-fw" title="Exit"></i></a>
+            &nbsp;&nbsp;
+            <a href="javascript:call('settings')" class="small rest"><i class="fa fa-cog fa-fw"
+                    id="settings"></i></a>&nbsp;&nbsp;
+            <a href="javascript:call('tourguide')" class="small rest"><i class="fa fa-question"
+                    id="helper"></i></a>&nbsp;&nbsp;
+            <a href="javascript:call('about')" class="small rest"><i class="fa fa-info fa-fw"
+                    id="info"></i></a>&nbsp;&nbsp;
+            <a href="javascript:call('winhider')" class="small rest" id="win-hider"><i class="fa fa-sort-desc fa-fw"
+                    id="winhider"></i></a><span id="no-use-space">&nbsp;&nbsp;</span>
+            <a href="javascript:call('minimizer')" class="small rest"><i class="fa fa-minus fa-fw"
+                    id="minimizer"></i></a>&nbsp;&nbsp;
+            <a href="javascript:window.close()" class="small rest"><i class="fa fa-times fa-fw" id="exit"></i></a>
+            <script>
+                $('#helper').attr('title', i18n.__('helper'));
+                $('#settings').attr('title', i18n.__('settings'));
+                $('#info').attr('title', i18n.__('info'));
+                $('#winhider').attr('title', i18n.__('winhider'));
+                $('#minimizer').attr('title', i18n.__('minimizer'));
+                $('#exit').attr('title', i18n.__('exit'));
+                if (process.platform == "darwin") $("#controller").css("display", "none");
+            </script>
         </div>
-        <div id="set" class="justify-content-center">
-            <form action="timer.html" method="GET">
-                <input name="title" id="title" placeholder="please enter a title" type="text" class="small" maxlength="14" /><br /><br />
-                <input name="work-time" id="work-time" placeholder="work for (minutes)" type="number" onkeypress="return (/[0-9]/.test(String.fromCharCode(event.keyCode)))"
-                    style="ime-mode:Disabled" class="work lead" autofocus required /><br /><br />
-                <input name="rest-time" id="rest-time" placeholder="then rest for (minutes)" type="number" onkeypress="return (/[0-9]/.test(String.fromCharCode(event.keyCode)))"
-                    style="ime-mode:Disabled" class="rest lead" required /><br /><br />
-                <input name="loop" id="loop" placeholder="loop for (times)" type="number" onkeypress="return (/[0-9]/.test(String.fromCharCode(event.keyCode)))"
-                    style="ime-mode:Disabled" class="small" required /><br /><!-- control that only numbers are OK -->
+        <div id="tip" class="extreme-small font-weight-bold text-muted">
+            <script>document.write(i18n.__('tip'));</script>
+        </div>
+        <div id="set" class="container-fluid">
+            <form action="timer.html" method="GET" class="justify-content-center align-content-center">
+                <input name="title" id="title" type="text" class="small" maxlength="11" />
+                <div class="dropdown dropleft focuser">
+                    <a class="dropdown-toggle" href="#" role="button" id="dropdownMenuButton" data-toggle="dropdown"
+                        aria-haspopup="true" aria-expanded="false" data-offset="0, 21">&nbsp;
+                        <span class="focuser extreme-small text-muted">
+                            <script>document.write(i18n.__('default1') + "<br />" + i18n.__('default2'))</script>
+                        </span>
+                    </a>
+                    <div class="dropdown-menu" aria-labelledby="dropdownMenuButton">
+                        <a class="dropdown-item" href="#">学习</a>
+                        <a class="dropdown-item" href="#">项目</a>
+                        <div class="dropdown-divider"></div>
+                        <div class="px-4">
+                            <input type="button" class="dropdown-controller rest" id="more-defaults" value="+" />&nbsp;
+                            <input type="button" class="dropdown-controller rest" id="less-defaults" value="-" />&nbsp;
+                            <input type="button" class="dropdown-controller rest" id="edit-defaults" />
+                            <script>
+                                $("#edit-defaults").val(i18n.__('edit'));
+                            </script>
+                        </div>
+                    </div>
+                </div><br /><br />
+                <div class="align-content-center">
+                    <input name="work-time" id="work-time" type="number" onkeyup="allset()"
+                        oninput="if (value.length > 4) value = value.slice(0, 4)" style="ime-mode:Disabled"
+                        class="work lead" autofocus required /><input id="focus-work-set" type="checkbox"
+                        onchange="focusworkset()" /><span class="focuser extreme-small work">
+                        <script>document.write(i18n.__('focusmode1') + "<br />" + i18n.__('focusmode2'))</script>
+                    </span>
+                </div>
+                <br />
+                <div class="align-content-center">
+                    <input name="rest-time" id="rest-time" type="number" onkeyup="allset()"
+                        oninput="if (value.length > 4) value = value.slice(0, 4)" style="ime-mode:Disabled"
+                        class="rest lead" required /><input id="focus-rest-set" type="checkbox"
+                        onchange="fullscreenset()" /><span class="focuser extreme-small rest">
+                        <script>document.write(i18n.__('focusmode1') + "<br />" + i18n.__('focusmode2'))</script>
+                    </span>
+                </div>
+                <br />
+                <input name="loop" id="loop" type="number" onkeyup="allset()"
+                    oninput="if (value.length > 3) value = value.slice(0, 3)" style="ime-mode:Disabled"
+                    class="small text-muted" required />
+                <br /><br />
+                <!-- control that only numbers are OK -->
+                <input name="note" id="note" type="text" class="small text-muted" maxlength="39" />
+                <br /><br />
             </form>
+            <script>
+                $('#work-time').attr('placeholder', i18n.__('worktime'));
+                $('#title').attr('placeholder', i18n.__('title'));
+                $('#rest-time').attr('placeholder', i18n.__('resttime'));
+                $('#loop').attr('placeholder', i18n.__('loop'));
+                $('#note').attr('placeholder', i18n.__('note'));
+                $('#work-time').attr('title', i18n.__('worktime'));
+                $('#title').attr('title', i18n.__('title'));
+                $('#rest-time').attr('title', i18n.__('resttime'));
+                $('#loop').attr('title', i18n.__('loop'));
+                $('#note').attr('title', i18n.__('note'));
+                $(".focuscheck").attr('title', i18n.__('fullscreentip'));
+            </script>
+        </div>
+        <div id="allsum" class="small font-weight-bold text-muted">
+            <script>document.write(i18n.__('allsum1'));</script> <span id="allsum-num">---</span>
+            <script>document.write(i18n.__('allsum2'));</script> <span id="to-num-h">--</span>:<span
+                id="to-num-min">--</span>
         </div>
     </div>
-    <script src="updater.js"></script>
     <script>
+        var timecnt, myDate, h, min;
+        function sumget() {
+            timecnt = (parseInt($("#work-time").val()) + parseInt($("#rest-time").val())) * parseInt($("#loop").val());
+            $("#allsum-num").html(timecnt);
+            myDate = new Date();
+            h = myDate.getHours() + parseInt(timecnt / 60);
+            min = myDate.getMinutes() + timecnt % 60;
+            if (min >= 60) min -= 60, h++;
+            while (h >= 24) h -= 24;
+            $("#to-num-h").html(h);
+            if (min >= 10) $("#to-num-min").html(min);
+            else $("#to-num-min").html("0" + min);
+        }
+        isTimerWindow(false);
         $("#work-time").val(store.get("worktime"));
         $("#rest-time").val(store.get("resttime"));
         $("#loop").val(store.get("looptime"));
+        if ((parseInt($("#work-time").val()) + parseInt($("#rest-time").val())) * parseInt($("#loop").val())) sumget();
         if (process.platform == "darwin") {
             $("#win-hider").css("display", "none");
             $("#no-use-space").css("display", "none");
         }
+        function allset() {
+            if ((parseInt($("#work-time").val()) + parseInt($("#rest-time").val())) * parseInt($("#loop").val())) sumget();
+            else {
+                $("#allsum-num").html("---");
+                $("#to-num-h").html("--");
+                $("#to-num-min").html("--");
+            }
+        }
+        if (store.get("fullscreen") == true) document.getElementById("focus-rest-set").checked = true;
+        else document.getElementById("focus-rest-set").checked = false;
+        function fullscreenset() {
+            if (document.getElementById("focus-rest-set").checked == true) store.set("fullscreen", true);
+            else store.set("fullscreen", false);
+        }
+        if (store.get("fullscreen-work") == true) document.getElementById("focus-work-set").checked = true;
+        else document.getElementById("focus-work-set").checked = false;
+        function focusworkset() {
+            if (document.getElementById("focus-work-set").checked == true) store.set("fullscreen-work", true);
+            else store.set("fullscreen-work", false);
+        }
     </script>
+    <script src="renderer.js"></script>
 </body>
 
 </html>

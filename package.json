@@ -1,53 +1,36 @@
 {
   "name": "wnr",
-  "version": "1.1.8",
-  "update-use-version": "11877",
-  "description": "It's a timer app with strong expansibility for computers. The name is a abbr of \"Work & Rest\".",
+  "version": "1.4.0",
+  "description": "It's a timer app with strong expansibility for computers. The name is a abbr of \"Work and Rest\".",
   "main": "main.js",
   "scripts": {
     "start": "electron .",
-    "win": "electron-builder --win --x64",
-    "mac": "electron-builder --mac --x64",
-    "linux": "electron-builder --linux --x64"
+    "win": "node ./res/builder/win.js",
+    "mac": "node ./res/builder/mac.js",
+    "linux": "node ./res/builder/linux.js"
   },
   "repository": {
     "type": "git",
     "url": "https://github.com/RoderickQiu/wnr.git"
   },
   "author": "RoderickQiu",
-  "license": "MIT",
+  "license": "MPL-2.0",
   "homepage": "https://wnr.scris.top",
   "appId": "com.scrisstudio.wnr",
-  "copyright": "© Roderick Qiu",
+  "copyright": "(c) Roderick Qiu",
   "productName": "wnr",
   "dependencies": {
-    "auto-launch": "^5.0.5",
-    "cheerio": "^1.0.0-rc.2",
-    "electron-store": "^2.0.0",
-    "request": "^2.88.0"
+    "@types/winreg": "1.2.30",
+    "auto-launch": "5.0.5",
+    "compare-version": "0.1.2",
+    "electron-store": "3.3.0",
+    "i18n": "0.8.3",
+    "node-notifier": "5.4.0",
+    "request": "2.88.0",
+    "winreg": "1.2.4"
   },
   "devDependencies": {
-    "electron": "^4.0.4",
-    "electron-builder": "^20.38.5"
-  },
-  "build": {
-    "win": {
-      "target": [
-        "dir"
-      ],
-      "icon": "res/icons/iconWin.ico"
-    },
-    "mac": {
-      "target": [
-        "dir"
-      ],
-      "icon": "res/icons/iconMac.icns"
-    },
-    "linux": {
-      "target": [
-        "dir"
-      ],
-      "icon": "res/icons/wnrIcon.png"
-    }
+    "electron": "5.0.4",
+    "electron-builder": "20.43.0"
   }
 }
