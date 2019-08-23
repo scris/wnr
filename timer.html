@@ -92,7 +92,7 @@
         var h = i18n.__('h');
         var min = i18n.__('min');
         var s = i18n.__('s');
-        if (!worktime || !resttime || !loop || worktime == 6000000 || resttime == 6000000) {//use ms for 1s, former edited by mistakes
+        if (!loop || worktime <= 60000 || resttime <= 60000) {//use ms for 1s
             $("#timer").html("<p class='text-center text-muted lead'>" + i18n.__('notenough') + "<br/><a href='index.html' class='work'>" + i18n.__('back') + "</a></p>");
             $("#timer").css("width", "75%");
             isTimerWindow(false);
@@ -215,8 +215,8 @@
                     minutes = parseInt((seconds - hours * 3600) / 60);
                     seconds = seconds - hours * 3600 - minutes * 60;
                     $("#now-timing").text(hours + h + minutes + min + seconds + s);
-                    if (minutes == 0 && morethan1) {
-                        ipc.send("1min");
+                    if (minutes == 0 && morethan1 && hours == 0) {
+                        if (store.get("onemintip") != false) ipc.send("1min");
                         morethan1 = 0;
                     }
                 } else {

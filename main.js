@@ -56,16 +56,18 @@ function createWindow() {
 function alarmSet() {
     if (!resetAlarm) {
         resetAlarm = setInterval(function () {
-            if (win != null) win.flashFrame(true);
-            notifier.notify(
-                {
-                    title: i18n.__('alarmtip'),
-                    message: i18n.__('alarmtipmsg'),
-                    sound: true, // Only Notification Center or Windows Toasters
-                    wait: true // Wait with callback, until user action is taken against notification
-                }
-            );
-            if (!win.isVisible()) win.show();
+            if (store.get('alarmtip')) {
+                if (win != null) win.flashFrame(true);
+                notifier.notify(
+                    {
+                        title: i18n.__('alarmtip'),
+                        message: i18n.__('alarmtipmsg'),
+                        sound: true, // Only Notification Center or Windows Toasters
+                        wait: true // Wait with callback, until user action is taken against notification
+                    }
+                );
+                if (win != null) if (!win.isVisible()) win.show();
+            }
         }, 1200000)//不断提示使用wnr
     }
 }
@@ -100,7 +102,7 @@ app.on('ready', () => {
     i18n.setLocale(store.get("i18n"));//国际化组件默认设置
 
     const gotTheLock = app.requestSingleInstanceLock();
-    if (!gotTheLock) {
+    if (!gotTheLock && win != null) {
         dialog.showMessageBox(win, {
             title: i18n.__('multiwnr'),
             type: "warning",
@@ -114,14 +116,14 @@ app.on('ready', () => {
         })
     }//不希望有多个wnr同时运行
 
-    if (store.get("top") == true) win.setAlwaysOnTop(true);
+    if (store.get("top") == true && win != null) win.setAlwaysOnTop(true);
 
     if (!store.get('hotkey1')) store.set('hotkey1', 'W');
     if (!store.get('hotkey2')) store.set('hotkey2', 'S');
 
     globalShortcut.register('CommandOrControl+Shift+Alt+' + store.get('hotkey1'), () => {
         if (!isTimerWin || (isWorkMode && (!store.get('fullscreen-work')) || (!isWorkMode && (!store.get('fullscreen'))))) {
-            win.isVisible() ? win.hide() : win.show();
+            if (win != null) win.isVisible() ? win.hide() : win.show();
             if (settingsWin != null) settingsWin.isVisible() ? settingsWin.hide() : settingsWin.show();
             if (aboutWin != null) aboutWin.isVisible() ? aboutWin.hide() : aboutWin.show();
             if (tourWin != null) tourWin.isVisible() ? tourWin.hide() : tourWin.show();
@@ -152,7 +154,7 @@ app.on('ready', () => {
             label: i18n.__('startorstop'),
             enabled: false,
             click: function () {
-                win.webContents.send('startorstop')
+                if (win != null) win.webContents.send('startorstop')
             }
         }, {
             type: 'separator'
@@ -175,7 +177,7 @@ app.on('ready', () => {
             type: 'separator'
         }, {
             label: i18n.__('showorhide'), click: () => {
-                win.isVisible() ? win.hide() : win.show();
+                if (win != null) win.isVisible() ? win.hide() : win.show();
                 if (settingsWin != null) settingsWin.isVisible() ? settingsWin.hide() : settingsWin.show();
                 if (aboutWin != null) aboutWin.isVisible() ? aboutWin.hide() : aboutWin.show();
                 if (tourWin != null) tourWin.isVisible() ? tourWin.hide() : tourWin.show();
@@ -188,7 +190,7 @@ app.on('ready', () => {
         tray.setToolTip('wnr');
         tray.setContextMenu(contextMenu);
         tray.on('click', () => {
-            win.isVisible() ? win.hide() : win.show();
+            if (win != null) win.isVisible() ? win.hide() : win.show();
             if (settingsWin != null) settingsWin.isVisible() ? settingsWin.hide() : settingsWin.show();
             if (aboutWin != null) aboutWin.isVisible() ? aboutWin.hide() : aboutWin.show();
             if (tourWin != null) tourWin.isVisible() ? tourWin.hide() : tourWin.show();
@@ -292,12 +294,13 @@ function isDarkMode() {
         if (process.platform == 'darwin') {
             if (systemPreferences.isDarkMode()) {
                 store.set('isDarkMode', true);
-                win.backgroundColor = '#393939';
+                if (win != null) win.backgroundColor = '#393939';
             }
             systemPreferences.subscribeNotification(
                 'AppleInterfaceThemeChangedNotification',
                 function theThemeHasChanged() {
                     isDarkMode();
+                    if (win != null) win.webContents.send('darkModeChanges');
                 }
             )
         } else if (process.platform == 'win32') {
@@ -313,7 +316,7 @@ function isDarkMode() {
                         if (items[i].name == 'AppsUseLightTheme') {
                             if (items[i].value == "0x0") {
                                 store.set('isDarkMode', true);
-                                win.backgroundColor = '#393939';
+                                if (win != null) win.backgroundColor = '#393939';
                             }
                         }
                     }
@@ -332,8 +335,8 @@ app.on('activate', () => {
 })
 
 ipcMain.on('focus-first', function () {
-    if (store.get("top") != true) win.setAlwaysOnTop(true);//全屏时恒定最上层
-    win.setFullScreen(true);
+    if (store.get("top") != true && win != null) win.setAlwaysOnTop(true);//全屏时恒定最上层
+    if (win != null) win.setFullScreen(true);
     macOSFullscreenSolution(true);
     isWorkMode = true;
 })
@@ -467,52 +470,54 @@ ipcMain.on('relauncher', function () {
 })
 
 ipcMain.on('winhider', function () {
-    win.hide()
+    if (win != null) win.hide()
 })
 
 ipcMain.on('minimizer', function () {
-    win.minimize()
+    if (win != null) win.minimize()
 })
 
 function about() {
     if (app.isReady()) {
-        aboutWin = new BrowserWindow({ parent: win, width: 256, height: 233, resizable: false, frame: false, show: false, center: true, titleBarStyle: "hidden", webPreferences: { nodeIntegration: true } });
-        aboutWin.loadFile("about.html");
-        if (store.get("top") == true) aboutWin.setAlwaysOnTop(true);
-        aboutWin.once('ready-to-show', () => {
-            aboutWin.show();
-        })
-        aboutWin.on('closed', () => {
-            aboutWin = null
-        })
+        if (win != null) {
+            aboutWin = new BrowserWindow({ parent: win, width: 256, height: 233, resizable: false, frame: false, show: false, center: true, titleBarStyle: "hidden", webPreferences: { nodeIntegration: true } });
+            aboutWin.loadFile("about.html");
+            if (store.get("top") == true) aboutWin.setAlwaysOnTop(true);
+            aboutWin.once('ready-to-show', () => {
+                aboutWin.show();
+            })
+            aboutWin.on('closed', () => {
+                aboutWin = null
+            })
+        }
     }
 }
 ipcMain.on('about', about);
 
 function settings() {
     if (app.isReady()) {
-        settingsWin = new BrowserWindow({ parent: win, width: 729, height: 486, resizable: false, frame: false, show: false, center: true, webPreferences: { nodeIntegration: true }, titleBarStyle: "hidden" });
-        settingsWin.loadFile("settings.html");
-        if (store.get("top") == true) settingsWin.setAlwaysOnTop(true);
-        settingsWin.once('ready-to-show', () => {
-            settingsWin.show();
-        })
-        settingsWin.on('closed', () => {
-            if (win != null) {
+        if (win != null) {
+            settingsWin = new BrowserWindow({ parent: win, width: 729, height: 486, resizable: false, frame: false, show: false, center: true, webPreferences: { nodeIntegration: true }, titleBarStyle: "hidden" });
+            settingsWin.loadFile("settings.html");
+            if (store.get("top") == true) settingsWin.setAlwaysOnTop(true);
+            settingsWin.once('ready-to-show', () => {
+                settingsWin.show();
+            })
+            settingsWin.on('closed', () => {
                 win.reload();
+                settingsWin = null
+            })
+            if (!store.get("settings-experience")) {
+                store.set("settings-experience", true);
+                notifier.notify(
+                    {
+                        title: i18n.__('settingstip'),
+                        message: i18n.__('settingstipmsg'),
+                        sound: true, // Only Notification Center or Windows Toasters
+                        wait: true // Wait with callback, until user action is taken against notification
+                    }
+                );
             }
-            settingsWin = null
-        })
-        if (!store.get("settings-experience")) {
-            store.set("settings-experience", true);
-            notifier.notify(
-                {
-                    title: i18n.__('settingstip'),
-                    message: i18n.__('settingstipmsg'),
-                    sound: true, // Only Notification Center or Windows Toasters
-                    wait: true // Wait with callback, until user action is taken against notification
-                }
-            );
         }
     }
 }
@@ -520,23 +525,25 @@ ipcMain.on('settings', settings);
 
 function tourguide() {
     if (app.isReady()) {
-        tourWin = new BrowserWindow({ parent: win, width: 729, height: 600, resizable: false, frame: false, show: false, center: true, titleBarStyle: "hidden", webPreferences: { nodeIntegration: true } });
-        tourWin.loadFile("tourguide.html");
-        if (store.get("top") == true) tourWin.setAlwaysOnTop(true);
-        tourWin.once('ready-to-show', () => {
-            tourWin.show();
-        })
-        tourWin.on('closed', () => {
-            tourWin = null
-        })
-        notifier.notify(
-            {
-                title: i18n.__('welcomer1'),
-                message: i18n.__('alarmtipmsg'),
-                sound: true, // Only Notification Center or Windows Toasters
-                wait: true // Wait with callback, until user action is taken against notification
-            }
-        );
+        if (win != null) {
+            tourWin = new BrowserWindow({ parent: win, width: 729, height: 600, resizable: false, frame: false, show: false, center: true, titleBarStyle: "hidden", webPreferences: { nodeIntegration: true } });
+            tourWin.loadFile("tourguide.html");
+            if (store.get("top") == true) tourWin.setAlwaysOnTop(true);
+            tourWin.once('ready-to-show', () => {
+                tourWin.show();
+            })
+            tourWin.on('closed', () => {
+                tourWin = null
+            })
+            notifier.notify(
+                {
+                    title: i18n.__('welcomer1'),
+                    message: i18n.__('alarmtipmsg'),
+                    sound: true, // Only Notification Center or Windows Toasters
+                    wait: true // Wait with callback, until user action is taken against notification
+                }
+            );
+        }
     }
 }
 ipcMain.on('tourguide', tourguide);
@@ -569,7 +576,7 @@ ipcMain.on("timer-win", function (event, message) {
             contextMenu.items[2].enabled = true;
         }
         globalShortcut.register('CommandOrControl+Shift+Alt+' + store.get('hotkey2'), () => {
-            win.webContents.send('startorstop');
+            if (win != null) win.webContents.send('startorstop');
         })
         if (resetAlarm) {
             clearTimeout(resetAlarm);
