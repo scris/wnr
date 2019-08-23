@@ -23,7 +23,7 @@ function createWindow() {
         width: 364,
         height: 360,
         frame: false,
-        resizable: false,
+        resizable: true,
         maximizable: false,
         show: false,
         hasShadow: true,
@@ -35,11 +35,10 @@ function createWindow() {
 
     // 然后加载应用的 index.html。
     win.loadFile('index.html');
-
     //在加载页面时，渲染进程第一次完成绘制时，会发出 ready-to-show 事件。在此事件后显示窗口将没有视觉闪烁
     win.once('ready-to-show', () => {
         win.show()
-        //win.webContents.openDevTools()
+        win.webContents.openDevTools()
     });
 
     // 当 window 被关闭，这个事件会被触发。
